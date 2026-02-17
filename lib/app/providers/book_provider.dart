@@ -1,10 +1,12 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+// Firebase dinonaktifkan sementara untuk testing
+// import 'package:cloud_firestore/cloud_firestore.dart';
 import '../data/models/book_model.dart';
 
 class BookProvider extends ChangeNotifier {
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  // Firebase dinonaktifkan sementara
+  // final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   
   List<BookModel> _allBooks = [];
   List<BookModel> _filteredBooks = [];
@@ -18,20 +20,15 @@ class BookProvider extends ChangeNotifier {
   String? get errorMessage => _errorMessage;
   double get selectedRadius => _selectedRadius;
 
-  // Fetch all books from Firestore
+  // Fetch all books - sementara pakai dummy data
   Future<void> fetchBooks() async {
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
 
     try {
-      final snapshot = await _firestore
-          .collection('books')
-          .where('isAvailable', isEqualTo: true)
-          .orderBy('createdAt', descending: true)
-          .get();
-
-      _allBooks = snapshot.docs.map((doc) => BookModel.fromFirestore(doc)).toList();
+      // Sementara gunakan dummy books, Firebase bisa diaktifkan nanti
+      addDummyBooks();
       _filteredBooks = _allBooks;
     } catch (e) {
       _errorMessage = 'Failed to fetch books: $e';
@@ -41,13 +38,10 @@ class BookProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  // Stream books untuk real-time updates
+  // Stream books - placeholder (aktivkan Firebase nanti)
   Stream<List<BookModel>> streamBooks() {
-    return _firestore
-        .collection('books')
-        .where('isAvailable', isEqualTo: true)
-        .snapshots()
-        .map((snapshot) => snapshot.docs.map((doc) => BookModel.fromFirestore(doc)).toList());
+    // Placeholder stream dengan dummy data
+    return Stream.value(_allBooks);
   }
 
   // Set radius filter
@@ -105,14 +99,14 @@ class BookProvider extends ChangeNotifier {
     return _calculateHaversineDistance(userLat, userLng, book.latitude, book.longitude);
   }
 
-  // Add new book
+  // Add new book (simpan ke list lokal)
   Future<void> addBook(BookModel book) async {
     _isLoading = true;
     notifyListeners();
 
     try {
-      await _firestore.collection('books').add(book.toFirestore());
-      await fetchBooks();
+      _allBooks.add(book);
+      _filteredBooks = _allBooks;
     } catch (e) {
       _errorMessage = 'Failed to add book: $e';
     }
@@ -121,24 +115,29 @@ class BookProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  // Update book
+  // Update book (update dari list lokal)
   Future<void> updateBook(BookModel book) async {
     try {
-      await _firestore.collection('books').doc(book.id).update(book.toFirestore());
-      await fetchBooks();
+      final index = _allBooks.indexWhere((b) => b.id == book.id);
+      if (index != -1) {
+        _allBooks[index] = book;
+        _filteredBooks = _allBooks;
+      }
     } catch (e) {
       _errorMessage = 'Failed to update book: $e';
     }
+    notifyListeners();
   }
 
-  // Delete book
+  // Delete book (hapus dari list lokal)
   Future<void> deleteBook(String bookId) async {
     try {
-      await _firestore.collection('books').doc(bookId).delete();
-      await fetchBooks();
+      _allBooks.removeWhere((b) => b.id == bookId);
+      _filteredBooks = _allBooks;
     } catch (e) {
       _errorMessage = 'Failed to delete book: $e';
     }
+    notifyListeners();
   }
 
   // Search books

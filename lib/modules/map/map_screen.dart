@@ -1,5 +1,6 @@
-import 'package:flutter/material.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
+﻿import 'package:flutter/material.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
 import '../../app/providers/location_provider.dart';
 import '../../app/providers/book_provider.dart';
@@ -13,10 +14,10 @@ class MapScreen extends StatefulWidget {
 }
 
 class _MapScreenState extends State<MapScreen> {
-  GoogleMapController? _mapController;
-  Set<Marker> _markers = {};
-  Set<Circle> _circles = {};
+  final MapController _mapController = MapController();
   double _selectedRadius = 5.0; // Default 5 km
+  bool _isInitialized = false;
+  bool _showMap = true;
 
   final List<double> _radiusOptions = [2.0, 5.0, 10.0, 20.0];
 
@@ -32,71 +33,18 @@ class _MapScreenState extends State<MapScreen> {
     final locationProvider = Provider.of<LocationProvider>(context, listen: false);
     final bookProvider = Provider.of<BookProvider>(context, listen: false);
 
-    // Get current location
-    await locationProvider.getCurrentLocation();
-    
-    // Load dummy books for testing (tanpa Firebase)
+    // Load dummy books for testing
     bookProvider.addDummyBooks();
 
-    // Update markers
-    _updateMarkers();
-  }
-
-  void _updateMarkers() {
-    final bookProvider = Provider.of<BookProvider>(context, listen: false);
-    final locationProvider = Provider.of<LocationProvider>(context, listen: false);
-
-    // Filter books by radius
-    final booksInRadius = bookProvider.getBooksWithinRadius(
-      locationProvider.latitude,
-      locationProvider.longitude,
-      _selectedRadius,
-    );
-
-    Set<Marker> markers = {};
-
-    // Add user location marker
-    markers.add(
-      Marker(
-        markerId: const MarkerId('user_location'),
-        position: LatLng(locationProvider.latitude, locationProvider.longitude),
-        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueBlue),
-        infoWindow: const InfoWindow(title: 'Lokasi Anda'),
-      ),
-    );
-
-    // Add book markers
-    for (var book in booksInRadius) {
-      markers.add(
-        Marker(
-          markerId: MarkerId(book.id),
-          position: LatLng(book.latitude, book.longitude),
-          icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
-          infoWindow: InfoWindow(
-            title: book.title,
-            snippet: book.author,
-          ),
-          onTap: () {
-            _showBookBottomSheet(book);
-          },
-        ),
-      );
+    // Get current location
+    try {
+      await locationProvider.getCurrentLocation();
+    } catch (e) {
+      debugPrint('Location error: $e');
     }
 
-    // Update circle for radius
-    _circles = {
-      Circle(
-        circleId: const CircleId('radius_circle'),
-        center: LatLng(locationProvider.latitude, locationProvider.longitude),
-        radius: _selectedRadius * 1000, // Convert km to meters
-        fillColor: Colors.blue.withValues(alpha: 0.1),
-        strokeColor: Colors.blue,
-        strokeWidth: 2,
-      ),
-    };
-
     setState(() {
-      _markers = markers;
+      _isInitialized = true;
     });
   }
 
@@ -114,7 +62,7 @@ class _MapScreenState extends State<MapScreen> {
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (context) => Container(
-        height: MediaQuery.of(context).size.height * 0.45,
+        height: MediaQuery.of(context).size.height * 0.5,
         decoration: const BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
@@ -208,11 +156,7 @@ class _MapScreenState extends State<MapScreen> {
                               // Distance
                               Row(
                                 children: [
-                                  const Icon(
-                                    Icons.location_on,
-                                    size: 16,
-                                    color: Colors.red,
-                                  ),
+                                  const Icon(Icons.location_on, size: 16, color: Colors.red),
                                   const SizedBox(width: 4),
                                   Text(
                                     '${distance.toStringAsFixed(1)} km dari Anda',
@@ -232,18 +176,12 @@ class _MapScreenState extends State<MapScreen> {
                     // Description
                     const Text(
                       'Deskripsi',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.bold,
-                      ),
+                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
                     ),
                     const SizedBox(height: 4),
                     Text(
                       book.description,
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: Colors.grey[700],
-                      ),
+                      style: TextStyle(fontSize: 13, color: Colors.grey[700]),
                     ),
                     const SizedBox(height: 12),
                     // Genres
@@ -251,10 +189,7 @@ class _MapScreenState extends State<MapScreen> {
                       spacing: 8,
                       runSpacing: 4,
                       children: book.genres.map((genre) => Chip(
-                        label: Text(
-                          genre,
-                          style: const TextStyle(fontSize: 11),
-                        ),
+                        label: Text(genre, style: const TextStyle(fontSize: 11)),
                         padding: EdgeInsets.zero,
                         materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                       )).toList(),
@@ -268,28 +203,17 @@ class _MapScreenState extends State<MapScreen> {
                           backgroundColor: Colors.blue[100],
                           child: Text(
                             book.ownerName[0].toUpperCase(),
-                            style: const TextStyle(
-                              fontWeight: FontWeight.bold,
-                              color: Colors.blue,
-                            ),
+                            style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blue),
                           ),
                         ),
                         const SizedBox(width: 8),
                         Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(
-                              book.ownerName,
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
+                            Text(book.ownerName, style: const TextStyle(fontWeight: FontWeight.w500)),
                             Text(
                               book.address,
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: Colors.grey[600],
-                              ),
+                              style: TextStyle(fontSize: 12, color: Colors.grey[600]),
                             ),
                           ],
                         ),
@@ -301,10 +225,7 @@ class _MapScreenState extends State<MapScreen> {
                       children: [
                         Expanded(
                           child: OutlinedButton.icon(
-                            onPressed: () {
-                              Navigator.pop(context);
-                              // Navigate to book detail
-                            },
+                            onPressed: () => Navigator.pop(context),
                             icon: const Icon(Icons.info_outline),
                             label: const Text('Detail'),
                           ),
@@ -314,11 +235,8 @@ class _MapScreenState extends State<MapScreen> {
                           child: ElevatedButton.icon(
                             onPressed: () {
                               Navigator.pop(context);
-                              // Start chat
                               ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text('Fitur chat akan datang!'),
-                                ),
+                                const SnackBar(content: Text('Fitur chat akan datang!')),
                               );
                             },
                             icon: const Icon(Icons.chat),
@@ -364,39 +282,24 @@ class _MapScreenState extends State<MapScreen> {
         backgroundColor: Colors.white,
         foregroundColor: Colors.black,
         elevation: 1,
+        actions: [
+          IconButton(
+            icon: Icon(_showMap ? Icons.list : Icons.map),
+            onPressed: () => setState(() => _showMap = !_showMap),
+            tooltip: _showMap ? 'Tampilan List' : 'Tampilan Peta',
+          ),
+        ],
       ),
       body: Consumer2<LocationProvider, BookProvider>(
         builder: (context, locationProvider, bookProvider, child) {
-          if (locationProvider.isLoading) {
+          if (!_isInitialized && locationProvider.isLoading) {
             return const Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   CircularProgressIndicator(),
                   SizedBox(height: 16),
-                  Text('Mendapatkan lokasi...'),
-                ],
-              ),
-            );
-          }
-
-          if (locationProvider.errorMessage != null) {
-            return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(Icons.location_off, size: 64, color: Colors.grey),
-                  const SizedBox(height: 16),
-                  Text(
-                    locationProvider.errorMessage!,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(color: Colors.grey),
-                  ),
-                  const SizedBox(height: 16),
-                  ElevatedButton(
-                    onPressed: () => locationProvider.getCurrentLocation(),
-                    child: const Text('Coba Lagi'),
-                  ),
+                  Text('Memuat data buku...'),
                 ],
               ),
             );
@@ -408,151 +311,17 @@ class _MapScreenState extends State<MapScreen> {
             _selectedRadius,
           );
 
-          return Stack(
+          return Column(
             children: [
-              // Google Map
-              GoogleMap(
-                initialCameraPosition: CameraPosition(
-                  target: LatLng(locationProvider.latitude, locationProvider.longitude),
-                  zoom: 13,
-                ),
-                onMapCreated: (controller) {
-                  _mapController = controller;
-                },
-                markers: _markers,
-                circles: _circles,
-                myLocationEnabled: true,
-                myLocationButtonEnabled: false,
-                zoomControlsEnabled: false,
-                mapToolbarEnabled: false,
-              ),
-
-              // Radius Selector
-              Positioned(
-                top: 16,
-                left: 16,
-                right: 16,
-                child: Card(
-                  elevation: 4,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            const Text(
-                              'Radius Pencarian',
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            Text(
-                              '${booksInRadius.length} buku ditemukan',
-                              style: TextStyle(
-                                color: Colors.grey[600],
-                                fontSize: 12,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        Row(
-                          children: _radiusOptions.map((radius) {
-                            final isSelected = _selectedRadius == radius;
-                            return Expanded(
-                              child: GestureDetector(
-                                onTap: () {
-                                  setState(() {
-                                    _selectedRadius = radius;
-                                  });
-                                  _updateMarkers();
-                                },
-                                child: Container(
-                                  margin: const EdgeInsets.symmetric(horizontal: 4),
-                                  padding: const EdgeInsets.symmetric(vertical: 8),
-                                  decoration: BoxDecoration(
-                                    color: isSelected ? Colors.blue : Colors.grey[100],
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  child: Text(
-                                    '${radius.toInt()} km',
-                                    textAlign: TextAlign.center,
-                                    style: TextStyle(
-                                      color: isSelected ? Colors.white : Colors.black,
-                                      fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                                      fontSize: 13,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            );
-                          }).toList(),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-
-              // My Location Button
-              Positioned(
-                bottom: 100,
-                right: 16,
-                child: FloatingActionButton(
-                  heroTag: 'my_location',
-                  mini: true,
-                  backgroundColor: Colors.white,
-                  onPressed: () async {
-                    await locationProvider.getCurrentLocation();
-                    _mapController?.animateCamera(
-                      CameraUpdate.newLatLng(
-                        LatLng(locationProvider.latitude, locationProvider.longitude),
-                      ),
-                    );
-                    _updateMarkers();
-                  },
-                  child: const Icon(Icons.my_location, color: Colors.blue),
-                ),
-              ),
-
-              // Book List Preview
-              Positioned(
-                bottom: 16,
-                left: 16,
-                right: 16,
-                child: SizedBox(
-                  height: 130,
-                  child: booksInRadius.isEmpty
-                      ? Card(
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: const Center(
-                            child: Text(
-                              'Tidak ada buku dalam radius ini',
-                              style: TextStyle(color: Colors.grey),
-                            ),
-                          ),
-                        )
-                      : ListView.builder(
-                          scrollDirection: Axis.horizontal,
-                          itemCount: booksInRadius.length,
-                          itemBuilder: (context, index) {
-                            final book = booksInRadius[index];
-                            final distance = bookProvider.getDistanceToBook(
-                              locationProvider.latitude,
-                              locationProvider.longitude,
-                              book,
-                            );
-                            return _buildBookCard(book, distance);
-                          },
-                        ),
-                ),
+              // Radius Selector Card
+              _buildRadiusSelector(booksInRadius.length, locationProvider),
+              const Divider(height: 1),
+              
+              // Main content
+              Expanded(
+                child: _showMap
+                    ? _buildMapView(locationProvider, bookProvider, booksInRadius)
+                    : _buildListView(locationProvider, bookProvider, booksInRadius),
               ),
             ],
           );
@@ -561,27 +330,249 @@ class _MapScreenState extends State<MapScreen> {
     );
   }
 
+  Widget _buildRadiusSelector(int bookCount, LocationProvider locationProvider) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      color: Colors.white,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text('Radius Pencarian', style: TextStyle(fontWeight: FontWeight.bold)),
+              Text('$bookCount buku ditemukan', style: TextStyle(color: Colors.grey[600], fontSize: 12)),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: _radiusOptions.map((radius) {
+              final isSelected = _selectedRadius == radius;
+              return Expanded(
+                child: GestureDetector(
+                  onTap: () => setState(() => _selectedRadius = radius),
+                  child: Container(
+                    margin: const EdgeInsets.symmetric(horizontal: 4),
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    decoration: BoxDecoration(
+                      color: isSelected ? Colors.blue : Colors.grey[100],
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      '${radius.toInt()} km',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: isSelected ? Colors.white : Colors.black,
+                        fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+          if (locationProvider.currentAddress.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                const Icon(Icons.location_on, size: 14, color: Colors.blue),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: Text(
+                    locationProvider.currentAddress,
+                    style: TextStyle(fontSize: 11, color: Colors.grey[600]),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMapView(LocationProvider locationProvider, BookProvider bookProvider, List<BookModel> booksInRadius) {
+    final userLocation = LatLng(locationProvider.latitude, locationProvider.longitude);
+
+    return Stack(
+      children: [
+        // OpenStreetMap (GRATIS!)
+        FlutterMap(
+          mapController: _mapController,
+          options: MapOptions(
+            initialCenter: userLocation,
+            initialZoom: 13,
+          ),
+          children: [
+            // Map tiles from OpenStreetMap
+            TileLayer(
+              urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+              userAgentPackageName: 'com.example.book_share',
+            ),
+            
+            // Radius circle
+            CircleLayer(
+              circles: [
+                CircleMarker(
+                  point: userLocation,
+                  radius: _selectedRadius * 1000, // Convert km to meters
+                  useRadiusInMeter: true,
+                  color: Colors.blue.withOpacity(0.1),
+                  borderColor: Colors.blue,
+                  borderStrokeWidth: 2,
+                ),
+              ],
+            ),
+            
+            // Markers
+            MarkerLayer(
+              markers: [
+                // User location marker
+                Marker(
+                  point: userLocation,
+                  width: 40,
+                  height: 40,
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: Colors.blue,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: Colors.white, width: 3),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.3),
+                          blurRadius: 4,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: const Icon(Icons.person, color: Colors.white, size: 20),
+                  ),
+                ),
+                // Book markers
+                ...booksInRadius.map((book) => Marker(
+                  point: LatLng(book.latitude, book.longitude),
+                  width: 40,
+                  height: 40,
+                  child: GestureDetector(
+                    onTap: () => _showBookBottomSheet(book),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: Colors.red,
+                        shape: BoxShape.circle,
+                        border: Border.all(color: Colors.white, width: 2),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.3),
+                            blurRadius: 4,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: const Icon(Icons.book, color: Colors.white, size: 18),
+                    ),
+                  ),
+                )),
+              ],
+            ),
+          ],
+        ),
+
+        // My Location Button
+        Positioned(
+          bottom: 140,
+          right: 16,
+          child: FloatingActionButton(
+            heroTag: 'my_location',
+            mini: true,
+            backgroundColor: Colors.white,
+            onPressed: () async {
+              await locationProvider.getCurrentLocation();
+              _mapController.move(
+                LatLng(locationProvider.latitude, locationProvider.longitude),
+                13,
+              );
+            },
+            child: const Icon(Icons.my_location, color: Colors.blue),
+          ),
+        ),
+
+        // Book List Preview
+        Positioned(
+          bottom: 16,
+          left: 16,
+          right: 16,
+          child: SizedBox(
+            height: 120,
+            child: booksInRadius.isEmpty
+                ? Card(
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    child: const Center(
+                      child: Text('Tidak ada buku dalam radius ini', style: TextStyle(color: Colors.grey)),
+                    ),
+                  )
+                : ListView.builder(
+                    scrollDirection: Axis.horizontal,
+                    itemCount: booksInRadius.length,
+                    itemBuilder: (context, index) {
+                      final book = booksInRadius[index];
+                      final distance = bookProvider.getDistanceToBook(
+                        locationProvider.latitude, locationProvider.longitude, book);
+                      return _buildBookCard(book, distance);
+                    },
+                  ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildListView(LocationProvider locationProvider, BookProvider bookProvider, List<BookModel> booksInRadius) {
+    if (booksInRadius.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.book_outlined, size: 64, color: Colors.grey[300]),
+            const SizedBox(height: 16),
+            Text(
+              'Tidak ada buku dalam radius ${_selectedRadius.toInt()} km',
+              style: TextStyle(color: Colors.grey[600]),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return ListView.builder(
+      padding: const EdgeInsets.all(12),
+      itemCount: booksInRadius.length,
+      itemBuilder: (context, index) {
+        final book = booksInRadius[index];
+        final distance = bookProvider.getDistanceToBook(
+          locationProvider.latitude, locationProvider.longitude, book);
+        return _buildBookListTile(book, distance);
+      },
+    );
+  }
+
   Widget _buildBookCard(BookModel book, double distance) {
     return GestureDetector(
       onTap: () {
-        _mapController?.animateCamera(
-          CameraUpdate.newLatLng(LatLng(book.latitude, book.longitude)),
-        );
+        _mapController.move(LatLng(book.latitude, book.longitude), 15);
         _showBookBottomSheet(book);
       },
       child: Container(
         width: 200,
         margin: const EdgeInsets.only(right: 12),
         child: Card(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           elevation: 4,
           child: Padding(
             padding: const EdgeInsets.all(12),
             child: Row(
               children: [
-                // Book Cover
                 Container(
                   width: 50,
                   height: 75,
@@ -589,18 +580,12 @@ class _MapScreenState extends State<MapScreen> {
                     color: Colors.grey[200],
                     borderRadius: BorderRadius.circular(6),
                     image: book.imageUrl.isNotEmpty
-                        ? DecorationImage(
-                            image: NetworkImage(book.imageUrl),
-                            fit: BoxFit.cover,
-                          )
+                        ? DecorationImage(image: NetworkImage(book.imageUrl), fit: BoxFit.cover)
                         : null,
                   ),
-                  child: book.imageUrl.isEmpty
-                      ? const Icon(Icons.book, color: Colors.grey)
-                      : null,
+                  child: book.imageUrl.isEmpty ? const Icon(Icons.book, color: Colors.grey) : null,
                 ),
                 const SizedBox(width: 10),
-                // Book Info
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -608,39 +593,25 @@ class _MapScreenState extends State<MapScreen> {
                     children: [
                       Text(
                         book.title,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 12,
-                        ),
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                       ),
                       const SizedBox(height: 2),
                       Text(
                         book.author,
-                        style: TextStyle(
-                          fontSize: 10,
-                          color: Colors.grey[600],
-                        ),
+                        style: TextStyle(fontSize: 10, color: Colors.grey[600]),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
                       const SizedBox(height: 6),
                       Row(
                         children: [
-                          Icon(
-                            Icons.location_on,
-                            size: 12,
-                            color: Colors.red[400],
-                          ),
+                          Icon(Icons.location_on, size: 12, color: Colors.red[400]),
                           const SizedBox(width: 2),
                           Text(
                             '${distance.toStringAsFixed(1)} km',
-                            style: TextStyle(
-                              fontSize: 10,
-                              color: Colors.grey[700],
-                              fontWeight: FontWeight.w500,
-                            ),
+                            style: TextStyle(fontSize: 10, color: Colors.grey[700], fontWeight: FontWeight.w500),
                           ),
                         ],
                       ),
@@ -649,6 +620,81 @@ class _MapScreenState extends State<MapScreen> {
                 ),
               ],
             ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBookListTile(BookModel book, double distance) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: InkWell(
+        onTap: () => _showBookBottomSheet(book),
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Row(
+            children: [
+              Container(
+                width: 60,
+                height: 90,
+                decoration: BoxDecoration(
+                  color: Colors.grey[200],
+                  borderRadius: BorderRadius.circular(8),
+                  image: book.imageUrl.isNotEmpty
+                      ? DecorationImage(image: NetworkImage(book.imageUrl), fit: BoxFit.cover)
+                      : null,
+                ),
+                child: book.imageUrl.isEmpty ? const Icon(Icons.book, size: 30, color: Colors.grey) : null,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      book.title,
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(book.author, style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: _getConditionColor(book.condition),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(book.condition, style: const TextStyle(fontSize: 10, color: Colors.white)),
+                        ),
+                        const SizedBox(width: 8),
+                        Icon(Icons.location_on, size: 14, color: Colors.red[400]),
+                        Text(' ${distance.toStringAsFixed(1)} km', style: TextStyle(fontSize: 11, color: Colors.grey[700])),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        CircleAvatar(
+                          radius: 10,
+                          backgroundColor: Colors.blue[100],
+                          child: Text(book.ownerName[0].toUpperCase(), style: const TextStyle(fontSize: 10, color: Colors.blue)),
+                        ),
+                        const SizedBox(width: 6),
+                        Text(book.ownerName, style: TextStyle(fontSize: 11, color: Colors.grey[600])),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(Icons.chevron_right, color: Colors.grey),
+            ],
           ),
         ),
       ),

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:geolocator/geolocator.dart';
 import 'package:geocoding/geocoding.dart';
 
@@ -13,37 +14,43 @@ class LocationProvider extends ChangeNotifier {
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
 
-  double get latitude => _currentPosition?.latitude ?? -6.2088; // Default: Jakarta
+  // Default: Jakarta
+  double get latitude => _currentPosition?.latitude ?? -6.2088;
   double get longitude => _currentPosition?.longitude ?? 106.8456;
 
   Future<bool> checkPermission() async {
-    bool serviceEnabled;
-    LocationPermission permission;
+    try {
+      bool serviceEnabled;
+      LocationPermission permission;
 
-    serviceEnabled = await Geolocator.isLocationServiceEnabled();
-    if (!serviceEnabled) {
-      _errorMessage = 'Location services are disabled.';
-      notifyListeners();
-      return false;
-    }
-
-    permission = await Geolocator.checkPermission();
-    if (permission == LocationPermission.denied) {
-      permission = await Geolocator.requestPermission();
-      if (permission == LocationPermission.denied) {
-        _errorMessage = 'Location permissions are denied.';
+      serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) {
+        _errorMessage = 'Location services are disabled.';
         notifyListeners();
         return false;
       }
-    }
 
-    if (permission == LocationPermission.deniedForever) {
-      _errorMessage = 'Location permissions are permanently denied.';
-      notifyListeners();
+      permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+        if (permission == LocationPermission.denied) {
+          _errorMessage = 'Location permissions are denied.';
+          notifyListeners();
+          return false;
+        }
+      }
+
+      if (permission == LocationPermission.deniedForever) {
+        _errorMessage = 'Location permissions are permanently denied.';
+        notifyListeners();
+        return false;
+      }
+
+      return true;
+    } catch (e) {
+      debugPrint('Permission check error: $e');
       return false;
     }
-
-    return true;
   }
 
   Future<void> getCurrentLocation() async {
@@ -52,8 +59,19 @@ class LocationProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
+      // On web, geolocation may not work well
+      if (kIsWeb) {
+        // Use default location for web
+        _currentAddress = 'Jakarta, Indonesia (Default)';
+        _isLoading = false;
+        notifyListeners();
+        return;
+      }
+
       bool hasPermission = await checkPermission();
       if (!hasPermission) {
+        // Use default location if permission denied
+        _currentAddress = 'Lokasi default (Jakarta)';
         _isLoading = false;
         notifyListeners();
         return;
@@ -67,7 +85,9 @@ class LocationProvider extends ChangeNotifier {
 
       await _getAddressFromLatLng();
     } catch (e) {
-      _errorMessage = 'Failed to get location: $e';
+      debugPrint('Location error: $e');
+      _currentAddress = 'Lokasi default (Jakarta)';
+      // Don't set error message to allow app to continue with default location
     }
 
     _isLoading = false;

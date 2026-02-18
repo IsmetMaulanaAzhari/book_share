@@ -15,11 +15,28 @@ class MapScreen extends StatefulWidget {
 
 class _MapScreenState extends State<MapScreen> {
   final MapController _mapController = MapController();
+  final TextEditingController _searchController = TextEditingController();
+  
   double _selectedRadius = 5.0; // Default 5 km
   bool _isInitialized = false;
   bool _showMap = true;
+  bool _showFilters = false;
+  
+  // Smart Search State
+  String _searchQuery = '';
+  String _selectedGenre = 'Semua';
+  String _selectedCondition = 'Semua';
+  String _sortBy = 'distance'; // distance, title, newest
 
   final List<double> _radiusOptions = [2.0, 5.0, 10.0, 20.0];
+  final List<String> _genres = ['Semua', 'Novel', 'Fiksi', 'Bisnis', 'Self-Help', 'Teknologi', 'Sejarah'];
+  final List<String> _conditions = ['Semua', 'Baru', 'Bagus', 'Cukup', 'Bekas'];
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
 
   @override
   void initState() {
@@ -274,6 +291,50 @@ class _MapScreenState extends State<MapScreen> {
     }
   }
 
+  // Smart Search: Filter dan sort buku
+  List<BookModel> _applySmartSearch(List<BookModel> books, BookProvider bookProvider, LocationProvider locationProvider) {
+    var filtered = books;
+
+    // 1. Filter by search query (title, author, genre)
+    if (_searchQuery.isNotEmpty) {
+      final query = _searchQuery.toLowerCase();
+      filtered = filtered.where((book) {
+        return book.title.toLowerCase().contains(query) ||
+               book.author.toLowerCase().contains(query) ||
+               book.genres.any((g) => g.toLowerCase().contains(query));
+      }).toList();
+    }
+
+    // 2. Filter by genre
+    if (_selectedGenre != 'Semua') {
+      filtered = filtered.where((book) => book.genres.contains(_selectedGenre)).toList();
+    }
+
+    // 3. Filter by condition
+    if (_selectedCondition != 'Semua') {
+      filtered = filtered.where((book) => book.condition == _selectedCondition).toList();
+    }
+
+    // 4. Sort results
+    switch (_sortBy) {
+      case 'distance':
+        filtered.sort((a, b) {
+          final distA = bookProvider.getDistanceToBook(locationProvider.latitude, locationProvider.longitude, a);
+          final distB = bookProvider.getDistanceToBook(locationProvider.latitude, locationProvider.longitude, b);
+          return distA.compareTo(distB);
+        });
+        break;
+      case 'title':
+        filtered.sort((a, b) => a.title.compareTo(b.title));
+        break;
+      case 'newest':
+        filtered.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+        break;
+    }
+
+    return filtered;
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -281,8 +342,13 @@ class _MapScreenState extends State<MapScreen> {
         title: const Text('Cari Buku di Sekitar'),
         backgroundColor: Colors.white,
         foregroundColor: Colors.black,
-        elevation: 1,
+        elevation: 0,
         actions: [
+          IconButton(
+            icon: Icon(_showFilters ? Icons.filter_list_off : Icons.filter_list),
+            onPressed: () => setState(() => _showFilters = !_showFilters),
+            tooltip: 'Filter',
+          ),
           IconButton(
             icon: Icon(_showMap ? Icons.list : Icons.map),
             onPressed: () => setState(() => _showMap = !_showMap),
@@ -311,17 +377,26 @@ class _MapScreenState extends State<MapScreen> {
             _selectedRadius,
           );
 
+          // Apply smart search filters
+          final filteredBooks = _applySmartSearch(booksInRadius, bookProvider, locationProvider);
+
           return Column(
             children: [
+              // Search Bar
+              _buildSearchBar(),
+              
+              // Filter Panel (collapsible)
+              if (_showFilters) _buildFilterPanel(),
+              
               // Radius Selector Card
-              _buildRadiusSelector(booksInRadius.length, locationProvider),
+              _buildRadiusSelector(filteredBooks.length, booksInRadius.length, locationProvider),
               const Divider(height: 1),
               
               // Main content
               Expanded(
                 child: _showMap
-                    ? _buildMapView(locationProvider, bookProvider, booksInRadius)
-                    : _buildListView(locationProvider, bookProvider, booksInRadius),
+                    ? _buildMapView(locationProvider, bookProvider, filteredBooks)
+                    : _buildListView(locationProvider, bookProvider, filteredBooks),
               ),
             ],
           );
@@ -330,9 +405,9 @@ class _MapScreenState extends State<MapScreen> {
     );
   }
 
-  Widget _buildRadiusSelector(int bookCount, LocationProvider locationProvider) {
+  Widget _buildRadiusSelector(int filteredCount, int totalCount, LocationProvider locationProvider) {
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       color: Colors.white,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -340,8 +415,11 @@ class _MapScreenState extends State<MapScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text('Radius Pencarian', style: TextStyle(fontWeight: FontWeight.bold)),
-              Text('$bookCount buku ditemukan', style: TextStyle(color: Colors.grey[600], fontSize: 12)),
+              const Text('Radius', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+              Text(
+                '$filteredCount dari $totalCount buku',
+                style: TextStyle(color: Colors.grey[600], fontSize: 12),
+              ),
             ],
           ),
           const SizedBox(height: 8),
@@ -389,6 +467,185 @@ class _MapScreenState extends State<MapScreen> {
             ),
           ],
         ],
+      ),
+    );
+  }
+
+  Widget _buildSearchBar() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      color: Colors.white,
+      child: TextField(
+        controller: _searchController,
+        onChanged: (value) => setState(() => _searchQuery = value),
+        decoration: InputDecoration(
+          hintText: 'Cari judul, penulis, atau genre...',
+          hintStyle: TextStyle(color: Colors.grey[400], fontSize: 14),
+          prefixIcon: const Icon(Icons.search, color: Colors.grey),
+          suffixIcon: _searchQuery.isNotEmpty
+              ? IconButton(
+                  icon: const Icon(Icons.clear, color: Colors.grey),
+                  onPressed: () {
+                    _searchController.clear();
+                    setState(() => _searchQuery = '');
+                  },
+                )
+              : null,
+          filled: true,
+          fillColor: Colors.grey[100],
+          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: BorderSide.none,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFilterPanel() {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      color: Colors.grey[50],
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Sort By
+          Row(
+            children: [
+              const Icon(Icons.sort, size: 18, color: Colors.grey),
+              const SizedBox(width: 8),
+              const Text('Urutkan:', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
+              const SizedBox(width: 8),
+              Expanded(
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: [
+                      _buildSortChip('distance', 'Terdekat', Icons.near_me),
+                      _buildSortChip('title', 'Judul A-Z', Icons.sort_by_alpha),
+                      _buildSortChip('newest', 'Terbaru', Icons.access_time),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          
+          // Genre Filter
+          Row(
+            children: [
+              const Icon(Icons.category, size: 18, color: Colors.grey),
+              const SizedBox(width: 8),
+              const Text('Genre:', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
+              const SizedBox(width: 8),
+              Expanded(
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: _genres.map((genre) => _buildGenreChip(genre)).toList(),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          
+          // Condition Filter
+          Row(
+            children: [
+              const Icon(Icons.star, size: 18, color: Colors.grey),
+              const SizedBox(width: 8),
+              const Text('Kondisi:', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
+              const SizedBox(width: 8),
+              Expanded(
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: _conditions.map((cond) => _buildConditionChip(cond)).toList(),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          
+          // Reset Button
+          if (_searchQuery.isNotEmpty || _selectedGenre != 'Semua' || _selectedCondition != 'Semua')
+            Padding(
+              padding: const EdgeInsets.only(top: 12),
+              child: TextButton.icon(
+                onPressed: () {
+                  setState(() {
+                    _searchQuery = '';
+                    _searchController.clear();
+                    _selectedGenre = 'Semua';
+                    _selectedCondition = 'Semua';
+                    _sortBy = 'distance';
+                  });
+                },
+                icon: const Icon(Icons.refresh, size: 18),
+                label: const Text('Reset Filter'),
+                style: TextButton.styleFrom(foregroundColor: Colors.red),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSortChip(String value, String label, IconData icon) {
+    final isSelected = _sortBy == value;
+    return Padding(
+      padding: const EdgeInsets.only(right: 8),
+      child: FilterChip(
+        selected: isSelected,
+        label: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 14, color: isSelected ? Colors.white : Colors.grey[700]),
+            const SizedBox(width: 4),
+            Text(label, style: TextStyle(fontSize: 12, color: isSelected ? Colors.white : Colors.grey[700])),
+          ],
+        ),
+        onSelected: (_) => setState(() => _sortBy = value),
+        selectedColor: Colors.blue,
+        backgroundColor: Colors.white,
+        checkmarkColor: Colors.white,
+        showCheckmark: false,
+        padding: const EdgeInsets.symmetric(horizontal: 4),
+      ),
+    );
+  }
+
+  Widget _buildGenreChip(String genre) {
+    final isSelected = _selectedGenre == genre;
+    return Padding(
+      padding: const EdgeInsets.only(right: 8),
+      child: FilterChip(
+        selected: isSelected,
+        label: Text(genre, style: TextStyle(fontSize: 12, color: isSelected ? Colors.white : Colors.grey[700])),
+        onSelected: (_) => setState(() => _selectedGenre = genre),
+        selectedColor: Colors.green,
+        backgroundColor: Colors.white,
+        checkmarkColor: Colors.white,
+        showCheckmark: false,
+      ),
+    );
+  }
+
+  Widget _buildConditionChip(String condition) {
+    final isSelected = _selectedCondition == condition;
+    return Padding(
+      padding: const EdgeInsets.only(right: 8),
+      child: FilterChip(
+        selected: isSelected,
+        label: Text(condition, style: TextStyle(fontSize: 12, color: isSelected ? Colors.white : Colors.grey[700])),
+        onSelected: (_) => setState(() => _selectedCondition = condition),
+        selectedColor: _getConditionColor(condition),
+        backgroundColor: Colors.white,
+        checkmarkColor: Colors.white,
+        showCheckmark: false,
       ),
     );
   }

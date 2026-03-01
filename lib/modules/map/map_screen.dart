@@ -4,7 +4,10 @@ import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
 import '../../app/providers/location_provider.dart';
 import '../../app/providers/book_provider.dart';
+import '../../app/providers/chat_provider.dart';
 import '../../app/data/models/book_model.dart';
+import '../chat/chat_screen.dart';
+import '../chat/chat_list_screen.dart';
 
 class MapScreen extends StatefulWidget {
   const MapScreen({super.key});
@@ -252,9 +255,7 @@ class _MapScreenState extends State<MapScreen> {
                           child: ElevatedButton.icon(
                             onPressed: () {
                               Navigator.pop(context);
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('Fitur chat akan datang!')),
-                              );
+                              _openChatWithOwner(book);
                             },
                             icon: const Icon(Icons.chat),
                             label: const Text('Hubungi'),
@@ -272,6 +273,23 @@ class _MapScreenState extends State<MapScreen> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  void _openChatWithOwner(Book book) {
+    final chatProvider = Provider.of<ChatProvider>(context, listen: false);
+    final chatRoom = chatProvider.getOrCreateChatRoom(
+      bookId: book.id,
+      bookTitle: book.title,
+      otherUserId: book.ownerId,
+      otherUserName: book.ownerName ?? 'Pemilik Buku',
+    );
+    
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ChatScreen(chatRoomId: chatRoom.id),
       ),
     );
   }
@@ -344,6 +362,46 @@ class _MapScreenState extends State<MapScreen> {
         foregroundColor: Colors.black,
         elevation: 0,
         actions: [
+          // Chat button dengan badge unread count
+          Consumer<ChatProvider>(
+            builder: (context, chatProvider, child) {
+              final unreadCount = chatProvider.totalUnreadCount;
+              return Stack(
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.chat_bubble_outline),
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (context) => const ChatListScreen()),
+                      );
+                    },
+                    tooltip: 'Chat',
+                  ),
+                  if (unreadCount > 0)
+                    Positioned(
+                      right: 6,
+                      top: 6,
+                      child: Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: const BoxDecoration(
+                          color: Colors.red,
+                          shape: BoxShape.circle,
+                        ),
+                        child: Text(
+                          unreadCount > 9 ? '9+' : unreadCount.toString(),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              );
+            },
+          ),
           IconButton(
             icon: Icon(_showFilters ? Icons.filter_list_off : Icons.filter_list),
             onPressed: () => setState(() => _showFilters = !_showFilters),

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'app/providers/location_provider.dart';
 import 'app/providers/book_provider.dart';
+import 'app/providers/chat_provider.dart';
 import 'modules/map/map_screen.dart';
 
 void main() {
@@ -17,6 +18,7 @@ class BookShareApp extends StatelessWidget {
       providers: [
         ChangeNotifierProvider(create: (_) => LocationProvider()),
         ChangeNotifierProvider(create: (_) => BookProvider()),
+        ChangeNotifierProvider(create: (_) => ChatProvider()),
       ],
       child: MaterialApp(
         title: 'Book Share',

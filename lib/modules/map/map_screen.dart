@@ -8,6 +8,7 @@ import '../../app/providers/chat_provider.dart';
 import '../../app/data/models/book_model.dart';
 import '../chat/chat_screen.dart';
 import '../chat/chat_list_screen.dart';
+import '../book/book_detail_screen.dart';
 
 class MapScreen extends StatefulWidget {
   const MapScreen({super.key});
@@ -245,7 +246,18 @@ class _MapScreenState extends State<MapScreen> {
                       children: [
                         Expanded(
                           child: OutlinedButton.icon(
-                            onPressed: () => Navigator.pop(context),
+                            onPressed: () {
+                              Navigator.pop(context);
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => BookDetailScreen(
+                                    book: book,
+                                    distance: distance,
+                                  ),
+                                ),
+                              );
+                            },
                             icon: const Icon(Icons.info_outline),
                             label: const Text('Detail'),
                           ),
@@ -277,13 +289,13 @@ class _MapScreenState extends State<MapScreen> {
     );
   }
 
-  void _openChatWithOwner(Book book) {
+  void _openChatWithOwner(BookModel book) {
     final chatProvider = Provider.of<ChatProvider>(context, listen: false);
     final chatRoom = chatProvider.getOrCreateChatRoom(
       bookId: book.id,
       bookTitle: book.title,
-      otherUserId: book.ownerId,
-      otherUserName: book.ownerName ?? 'Pemilik Buku',
+      bookOwnerId: book.ownerId,
+      bookOwnerName: book.ownerName,
     );
     
     Navigator.push(

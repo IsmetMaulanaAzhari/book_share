@@ -131,7 +131,6 @@ class _CODPointPickerState extends State<CODPointPicker> {
       longitude: _selectedLocation!.longitude,
       meetingTime: _meetingTime,
       note: _noteController.text.trim().isNotEmpty ? _noteController.text.trim() : null,
-      proposedBy: 'current_user', // Will be set properly by ChatProvider
       status: CODStatus.proposed,
     );
 
@@ -153,7 +152,7 @@ class _CODPointPickerState extends State<CODPointPicker> {
   @override
   Widget build(BuildContext context) {
     final locationProvider = Provider.of<LocationProvider>(context);
-    final userLocation = locationProvider.currentLocation;
+    final userLocation = locationProvider.currentPosition;
     final initialCenter = userLocation != null
         ? LatLng(userLocation.latitude, userLocation.longitude)
         : const LatLng(-6.2297, 106.8295); // Default to Central Jakarta
